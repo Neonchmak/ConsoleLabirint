@@ -1,6 +1,2 @@
 ﻿  OlI.cpp
-E:\OLI-15\OlI\OlI\OlI.cpp(276,37): warning C4838: Преобразование из "int" в "SHORT" требует сужающего преобразования.
-E:\OLI-15\OlI\OlI\OlI.cpp(276,53): warning C4838: Преобразование из "int" в "SHORT" требует сужающего преобразования.
-E:\OLI-15\OlI\OlI\OlI.cpp(280,39): warning C4838: Преобразование из "const int" в "SHORT" требует сужающего преобразования.
-E:\OLI-15\OlI\OlI\OlI.cpp(280,54): warning C4838: Преобразование из "int" в "SHORT" требует сужающего преобразования.
-  OlI.vcxproj -> E:\OLI-15\OlI\x64\Debug\OlI.exe
+  OlI.vcxproj -> E:\ConsoleLabirint\x64\Debug\OlI.exe

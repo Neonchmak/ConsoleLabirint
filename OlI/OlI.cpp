@@ -25,48 +25,302 @@ public:
     }
 };
 
-// Размеры лабиринта
-const Vector2 mazeSize(101, 51);
+const Vector2 MAZE_SIZE(131,41);
 const int INIT_HEALTH = 50;
 const int COINS_FOR_BONUS = 2;
 const int HEALTH_BONUS = 5;
 const int ENEMY_DAMAGE = 15;
 const int TRAP_PENALTY = 3;
 
-// Игровые объекты
 const char WALL = '#';
 const char EMPTY = ' ';
 const char PLAYER = '@';
 const char COIN = 'C';
 const char ENEMY = 'E';
+const char BOSS = 'B';
 const char EXIT = 'X';
 const char TRAP = 'T';
 
-// Движение
-const Vector2 directions[] = { Vector2(0, -1), Vector2(-1, 0), Vector2(0, 1), Vector2(1, 0) };
+const int dx[] = { 0, -1, 0, 1 };
+const int dy[] = { -1, 0, 1, 0 };
 
-// Цвета для консоли
 const int COLOR_WALL = 15;
 const int COLOR_PLAYER = 11;
 const int COLOR_COIN = 14;
 const int COLOR_ENEMY = 12;
+const int COLOR_BOSS = 6;
 const int COLOR_EXIT = 10;
 const int COLOR_TRAP = 13;
 
-// Состояние игры
-Vector2 playerPos;
+int playerX, playerY;
 int health = INIT_HEALTH;
 int coinsCollected = 0;
 int coinsSinceLastBonus = 0;
 bool gameOver = false;
 
-// Работа с цветами
+//----------------------------------Prototypes----------------------------------
+
+void SetColor(int color);
+
+void GameOver(char ending);
+
+//----------------------------------Maze generation----------------------------------
+
+// Creating rooms
+void Createroom(vector<vector<char>>& maze, Vector2 cords) {
+    const int roomWidth = 20; 
+    const int roomHeight = 10; 
+
+    // Проверка
+    if (cords.x + roomWidth >= MAZE_SIZE.x || cords.y + roomHeight >= MAZE_SIZE.y)
+        return;
+
+    // Стены
+    for (int y = cords.y; y <= cords.y + roomHeight; y++) {
+        for (int x = cords.x; x <= cords.x + roomWidth; x++) {
+            if (y == cords.y || y == cords.y + roomHeight || x == cords.x || x == cords.x + roomWidth) 
+                maze[y][x] = WALL;
+            else 
+                maze[y][x] = EMPTY;
+            
+        }
+    }
+
+    //Спавн босса
+    maze[cords.y + roomHeight / 2][cords.x + roomWidth / 2] = BOSS;
+
+    // Выходы
+    int centerX = cords.x + roomWidth / 2;
+    int centerY = cords.y + roomHeight / 2;
+
+    maze[cords.y][centerX] = EMPTY;
+    maze[cords.y + roomHeight][centerX] = EMPTY;
+    maze[centerY][cords.x] = EMPTY;
+    maze[centerY][cords.x + roomWidth] = EMPTY;
+}
+
+// Maze generation
+void GenerateMaze(vector<vector<char>>& maze) {
+    maze.assign(MAZE_SIZE.y, vector<char>(MAZE_SIZE.x, WALL));
+
+    const int roomWidth = 15;
+    const int roomHeight = 7;
+    const int hMargin = 10;
+    const int vMargin = 5;
+
+    stack<pair<int, int>> st;
+    st.push({ 1,1 });
+    maze[1][1] = EMPTY;
+
+    //Комнаты 1
+    Createroom(maze, Vector2(10, 5));
+    Createroom(maze, Vector2(55, 5));
+    Createroom(maze, Vector2(95, 5));
+    //Комнаты 2
+    Createroom(maze, Vector2(10, 20));
+    Createroom(maze, Vector2(55, 20));
+    Createroom(maze, Vector2(95, 20));
+
+    while (!st.empty()) {
+        int x = st.top().first;
+        int y = st.top().second;
+        st.pop();
+
+        int dirs[] = { 0,1,2,3 };
+        for (int i = 0; i < 4; i++) swap(dirs[i], dirs[rand() % 4]);
+
+        for (int dir : dirs) {
+            int nx = x + dx[dir] * 2;
+            int ny = y + dy[dir] * 2;
+
+            if (ny > 0 && ny < MAZE_SIZE.y - 1 && nx > 0 && nx < MAZE_SIZE.x - 1 && maze[ny][nx] == WALL) {
+                maze[ny][nx] = EMPTY;
+                maze[y + dy[dir]][x + dx[dir]] = EMPTY;
+                st.push({ nx,ny });
+            }
+
+        }
+
+    }
+}
+
+// Patency check
+bool IsMazePassable(const vector<vector<char>>& maze) {
+    vector<vector<bool>> visited(MAZE_SIZE.y, vector<bool>(MAZE_SIZE.x, false));
+    queue<pair<int, int>> q;
+
+    q.push({ 1, 1 });
+    visited[1][1] = true;
+
+    while (!q.empty()) {
+        int x = q.front().first;
+        int y = q.front().second;
+        q.pop();
+
+        if (maze[y][x] == EXIT) return true;
+
+        for (int dir = 0; dir < 4; dir++) {
+            int nx = x + dx[dir];
+            int ny = y + dy[dir];
+
+            if (ny <= 0 || ny >= MAZE_SIZE.y - 1 || nx <= 0 || nx >= MAZE_SIZE.x - 1) continue;
+            if (maze[ny][nx] == WALL || maze[ny][nx] == ENEMY || maze[ny][nx] == TRAP) continue;
+            if (visited[ny][nx]) continue;
+
+            visited[ny][nx] = true;
+            q.push({ nx, ny });
+        }
+    }
+    return false;
+}
+
+// Creating maze
+void SetupMaze(vector<vector<char>>& maze) {
+    do {
+        GenerateMaze(maze);
+
+        maze[MAZE_SIZE.y - 2][MAZE_SIZE.x - 2] = EXIT;
+
+        for (int i = 0; i < 20;) {
+            int x = rand() % (MAZE_SIZE.x - 2) + 1;
+            int y = rand() % (MAZE_SIZE.y - 2) + 1;
+            if (maze[y][x] == EMPTY) {
+                maze[y][x] = COIN;
+                i++;
+            }
+        }
+
+        for (int i = 0; i < 15;) {
+            int x = rand() % (MAZE_SIZE.x - 2) + 1;
+            int y = rand() % (MAZE_SIZE.y - 2) + 1;
+            if (maze[y][x] == EMPTY) {
+                maze[y][x] = ENEMY;
+                i++;
+            }
+        }
+
+        for (int i = 0; i < 10;) {
+            int x = rand() % (MAZE_SIZE.x - 2) + 1;
+            int y = rand() % (MAZE_SIZE.y - 2) + 1;
+            if (maze[y][x] == EMPTY) {
+                maze[y][x] = TRAP;
+                i++;
+            }
+        }
+
+    } while (!IsMazePassable(maze));
+
+}
+
+//----------------------------------Rendering----------------------------------
+
+// Screen update
+void SetCur(int x, int y)
+{
+    COORD coord;
+    coord.X = x;
+    coord.Y = y;
+    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
+};
+
+// Rendering
+void DrawMaze(const vector<vector<char>>& maze) {
+
+    SetCur(0, 0);
+
+    for (int y = 0; y < MAZE_SIZE.y; y++) {
+        for (int x = 0; x < MAZE_SIZE.x; x++) {
+
+            char c = maze[y][x];
+            if (c == WALL) SetColor(COLOR_WALL);
+            else if (c == PLAYER) SetColor(COLOR_PLAYER);
+            else if (c == COIN) SetColor(COLOR_COIN);
+            else if (c == ENEMY) SetColor(COLOR_ENEMY);
+            else if (c == BOSS) SetColor(COLOR_BOSS);
+            else if (c == EXIT) SetColor(COLOR_EXIT);
+            else if (c == TRAP) SetColor(COLOR_TRAP);
+            cout << c;
+        }
+        cout << '\n';
+    }
+
+    SetColor(COLOR_WALL);
+    cout << "\nЗдоровье: " << health << endl;
+    cout << "Монеты: " << coinsCollected << "(след. бонус через "
+        << (COINS_FOR_BONUS - coinsSinceLastBonus) << ")\n";
+    cout << "Управление WASD, выход Q\n";
+}
+
+// Set color
 void SetColor(int color) {
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
     SetConsoleTextAttribute(hConsole, color);
 }
 
-// Завершение игры
+//----------------------------------Contact Check----------------------------------
+
+
+void ContactCoin() {
+    coinsCollected++;
+    coinsSinceLastBonus++;
+
+    if (coinsSinceLastBonus >= COINS_FOR_BONUS) {
+        health += HEALTH_BONUS;
+        coinsSinceLastBonus = 0;
+    }
+}
+
+void ContactTrap(vector<vector<char>>& maze) {
+    coinsCollected -= TRAP_PENALTY;
+    DrawMaze(maze);
+    cout << "\nВы наступили на ловушку! Потеряно 3 монеты!\n";
+    Sleep(2000);
+}
+
+void ContactEnemy(vector<vector<char>>& maze) {
+    health -= ENEMY_DAMAGE;
+    if (health <= 0) {
+        GameOver('D'); return;
+    }
+    system("cls");
+    DrawMaze(maze);
+    cout << "\nВы встретились с врагом! Потеряно 15 очков здоровья!\n";
+    Sleep(2000);
+}
+
+void ContactBoss(vector<vector<char>>& maze) {
+    health -= ENEMY_DAMAGE;
+    if (health <= 0) {
+        GameOver('D'); return;
+    }
+    system("cls");
+    DrawMaze(maze);
+    cout << "\nВы встретились с брссом! Потеряно 20 очков здоровья, полученно 5 монет!\n";
+    coinsCollected += 5;
+    Sleep(2000);
+}
+
+//----------------------------------Player movement----------------------------------
+void MovePlayer(vector<vector<char>>& maze, int newX, int newY) {
+    if (newX <= 0 || newX >= MAZE_SIZE.x - 1 || newY <= 0 || newY >= MAZE_SIZE.y - 1)
+        return;
+
+    char target = maze[newY][newX];
+    if (target == WALL) return;
+
+    maze[playerY][playerX] = EMPTY;
+    playerX = newX;
+    playerY = newY;
+    maze[playerY][playerX] = PLAYER;
+
+    if (target == COIN) ContactCoin();
+    else if (target == ENEMY) ContactEnemy(maze);
+    else if (target == TRAP) ContactTrap(maze);
+    else if (target == BOSS) ContactBoss(maze);
+    else if(target == EXIT) GameOver('E');
+}
+
+// Ending the game
 void GameOver(char ending) {
     gameOver = true;
     system("cls");
@@ -82,234 +336,33 @@ void GameOver(char ending) {
         cout << "Игра завершена\n";
     }
 
-    if (coinsCollected >= 0) {
-        cout << "Собрано монет: " << coinsCollected << endl;
-    }
-    else {
-        cout << "Монеты в долг: " << -coinsCollected << endl;
-    }
+    cout << "Собрано монет: " << coinsCollected << endl;
     cout << "Осталось здоровья: " << health << endl;
 }
 
-// Создание пустых квадратов в лаберинте
-void ClearSquare(vector<vector<char>>& maze, int startIndex) {
-    for (int i = startIndex + 10; i > startIndex; i--)
-        for (int j = startIndex + 20; j > startIndex; j--)
-            maze[i][j] = EMPTY;
-}
-
-// DFS генерация лабиринта
-void GenerateMazeDFS(vector<vector<char>>& maze) {
-    maze.assign(mazeSize.y, vector<char>(mazeSize.x, WALL));
-
-    stack<Vector2> st;
-    st.push(Vector2(1, 1));
-    maze[1][1] = EMPTY;
-
-    while (!st.empty()) {
-        Vector2 current = st.top();
-        st.pop();
-
-        int dirs[] = { 0, 1, 2, 3 };
-        for (int i = 0; i < 4; i++) swap(dirs[i], dirs[rand() % 4]);
-
-        for (int dir : dirs) {
-            Vector2 next = current + directions[dir] * 2;
-
-            if (next.x > 0 && next.x < mazeSize.x - 1 && next.y > 0 && next.y < mazeSize.y - 1 && maze[next.y][next.x] == WALL) {
-                maze[next.y][next.x] = EMPTY;
-                maze[current.y + directions[dir].y][current.x + directions[dir].x] = EMPTY;
-                st.push(next);
-            }
-        }
-    }
-    ClearSquare(maze, 5);
-}
-
-// BFS проверка проходимости лабиринта 
-bool IsMazePassableBFS(const vector<vector<char>>& maze) {
-    vector<vector<bool>> visited(mazeSize.y, vector<bool>(mazeSize.x, false));
-    queue<Vector2> q;
-
-    q.push(Vector2(1, 1));
-    visited[1][1] = true;
-
-    while (!q.empty()) {
-        Vector2 current = q.front();
-        q.pop();
-
-        if (maze[current.y][current.x] == EXIT) return true;
-
-        for (int dir = 0; dir < 4; dir++) {
-            Vector2 next = current + directions[dir];
-
-            if (next.x < 0 || next.x >= mazeSize.x || next.y < 0 || next.y >= mazeSize.y) continue;
-            if (maze[next.y][next.x] == WALL || maze[next.y][next.x] == ENEMY || maze[next.y][next.x] == TRAP) continue;
-            if (visited[next.y][next.x]) continue;
-
-            visited[next.y][next.x] = true;
-            q.push(next);
-        }
-    }
-    return false;
-}
-
-// Инициализация лабиринта 
-void SetupMaze(vector<vector<char>>& maze) {
-    do {
-        GenerateMazeDFS(maze);
-        maze[mazeSize.y - 2][mazeSize.x - 2] = EXIT;
-
-        for (int i = 0; i < 10;) {
-            Vector2 pos(rand() % (mazeSize.x - 2) + 1, rand() % (mazeSize.y - 2) + 1);
-            if (maze[pos.y][pos.x] == EMPTY) {
-                maze[pos.y][pos.x] = COIN;
-                i++;
-            }
-        }
-
-        for (int i = 0; i < 5;) {
-            Vector2 pos(rand() % (mazeSize.x - 2) + 1, rand() % (mazeSize.y - 2) + 1);
-            if (maze[pos.y][pos.x] == EMPTY) {
-                maze[pos.y][pos.x] = ENEMY;
-                i++;
-            }
-        }
-
-        for (int i = 0; i < 3;) {
-            Vector2 pos(rand() % (mazeSize.x - 2) + 1, rand() % (mazeSize.y - 2) + 1);
-            if (maze[pos.y][pos.x] == EMPTY) {
-                maze[pos.y][pos.x] = TRAP;
-                i++;
-            }
-        }
-
-    } while (!IsMazePassableBFS(maze));
-}
-
-// Отрисовка лабиринта
-void DrawMaze(const vector<vector<char>>& maze) {
-    system("cls");
-
-    // Ограничиваем отрисовку видимой областью вокруг игрока
-    int viewRadius = 30;
-    int startX = max(0, playerPos.x - viewRadius);
-    int endX = min(mazeSize.x, playerPos.x + viewRadius + 1);
-    int startY = max(0, playerPos.y - viewRadius);
-    int endY = min(mazeSize.y, playerPos.y + viewRadius + 1);
-
-    for (int y = startY; y < endY; y++) {
-        for (int x = startX; x < endX; x++) {
-            char c = maze[y][x];
-            if (c == WALL) SetColor(COLOR_WALL);
-            else if (c == PLAYER) SetColor(COLOR_PLAYER);
-            else if (c == COIN) SetColor(COLOR_COIN);
-            else if (c == ENEMY) SetColor(COLOR_ENEMY);
-            else if (c == EXIT) SetColor(COLOR_EXIT);
-            else if (c == TRAP) SetColor(COLOR_TRAP);
-            cout << c;
-        }
-        cout << endl;
-    }
-
-    SetColor(COLOR_WALL);
-
-    cout << "\nЗдоровье: " << health << endl;
-    cout << "Монеты: " << coinsCollected << " (след. бонус через "
-        << (COINS_FOR_BONUS - coinsSinceLastBonus) << ")" << endl;
-    cout << "Управление: WASD, выход: Q" << endl;
-    cout << "Позиция: (" << playerPos.x << ", " << playerPos.y << ")" << endl;
-}
-
-// Обработка контакта с монетой
-void HitCoin() {
-    coinsCollected++;
-    coinsSinceLastBonus++;
-
-    if (coinsSinceLastBonus >= COINS_FOR_BONUS) {
-        health += HEALTH_BONUS;
-        coinsSinceLastBonus = 0;
-    }
-}
-
-// Обработка контакта с ловушой
-void HitTrap(vector<vector<char>>& maze) {
-    coinsCollected -= TRAP_PENALTY;
-    DrawMaze(maze);
-    cout << "\nВы наступили на ловушку! Потеряно 3 монеты!\n";
-    Sleep(1500);
-}
-
-// Обработка контакта с врагом
-void HitEnemy(vector<vector<char>>& maze) {
-    health -= ENEMY_DAMAGE;
-    if (health <= 0) {
-        GameOver('D'); return;
-    }
-    DrawMaze(maze);
-    cout << "\nВы встретились с врагом! Потеряно 15 очков здоровья!\n";
-    Sleep(1500);
-}
-
-// Движение игрока
-void MovePlayer(vector<vector<char>>& maze, Vector2 newPos) {
-    if (newPos.x < 0 || newPos.x >= mazeSize.x || newPos.y < 0 || newPos.y >= mazeSize.y) return;
-
-    char target = maze[newPos.y][newPos.x];
-    if (target == WALL) return;
-
-    maze[playerPos.y][playerPos.x] = EMPTY;
-    playerPos = newPos;
-    maze[playerPos.y][playerPos.x] = PLAYER;
-
-    if (target == COIN) HitCoin();
-    else if (target == ENEMY) HitEnemy(maze);
-    else if (target == TRAP) HitTrap(maze);
-    else if (target == EXIT) GameOver('E');
-}
-
-// Функция для настройки консоли
-void SetupConsole() {
-    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-
-    // Устанавливаем размер буфера консоли
-    COORD bufferSize = { mazeSize.x + 1, mazeSize.y + 10 };
-    SetConsoleScreenBufferSize(hOut, bufferSize);
-
-    // Устанавливаем размер окна консоли
-    SMALL_RECT rect = { 0, 0, mazeSize.x, mazeSize.y + 5 };
-    SetConsoleWindowInfo(hOut, TRUE, &rect);
-
-    // Скрываем курсор
-    CONSOLE_CURSOR_INFO cursorInfo;
-    GetConsoleCursorInfo(hOut, &cursorInfo);
-    cursorInfo.bVisible = false;
-    SetConsoleCursorInfo(hOut, &cursorInfo);
-}
-
+//----------------------------------Main----------------------------------
 int main() {
     setlocale(0, "");
     srand(static_cast<unsigned int>(time(nullptr)));
 
-    // Настраиваем консоль перед началом игры
-    SetupConsole();
-
     vector<vector<char>> maze;
     SetupMaze(maze);
-    playerPos = Vector2(1, 1);
-    maze[playerPos.y][playerPos.x] = PLAYER;
+    playerX = playerY = 1;
+    maze[playerY][playerX] = PLAYER;
 
     while (!gameOver) {
         DrawMaze(maze);
         int input = _getch();
 
         switch (tolower(input)) {
-        case 'w': MovePlayer(maze, playerPos + Vector2(0, -1)); break;
-        case 'a': MovePlayer(maze, playerPos + Vector2(-1, 0)); break;
-        case 's': MovePlayer(maze, playerPos + Vector2(0, 1)); break;
-        case 'd': MovePlayer(maze, playerPos + Vector2(1, 0)); break;
+        case 'w': MovePlayer(maze, playerX, playerY - 1); break;
+        case 'a': MovePlayer(maze, playerX - 1, playerY); break;
+        case 's': MovePlayer(maze, playerX, playerY + 1); break;
+        case 'd': MovePlayer(maze, playerX + 1, playerY); break;
         case 'q': GameOver('Q'); break;
         }
     }
     return 0;
 }
+
+
